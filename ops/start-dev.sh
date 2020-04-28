@@ -50,7 +50,7 @@ export INDRA_NATS_JWT_SIGNER_PUBLIC_KEY=`
 # config & hard-coded stuff you might want to change
 
 ganacheProvider="http://ethprovider:8545"
-number_of_services=5 # NOTE: Gotta update this manually when adding/removing services :(
+number_of_services=8 # NOTE: Gotta update this manually when adding/removing services :(
 
 nats_port=4222
 node_port=8080
@@ -200,6 +200,7 @@ volumes:
   certs:
   chain_dev:
   database_dev:
+  grafana-storage:
 
 services:
 
@@ -285,6 +286,31 @@ services:
       - '$project'
     ports:
       - '6379:6379'
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - '$project'
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - /var/log:/var/log
+    command: -config.file=/etc/promtail/docker-config.yaml
+    networks:
+      - '$project'
+
+  grafana:
+    image: grafana/grafana:master
+    ports:
+      - "3001:3000"
+    networks:
+      - '$project'
+    volumes:
+      - 'grafana-storage:/var/lib/grafana'
 
 EOF
 
