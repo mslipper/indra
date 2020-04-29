@@ -7,12 +7,20 @@ import { ConfigService } from "../config/config.service";
 import { CFCoreProviderId, MessagingProviderId } from "../constants";
 import { LockService } from "../lock/lock.service";
 import { LoggerService } from "../logger/logger.service";
+import { AppInstanceRepository } from "../appInstance/appInstance.repository";
 
 import { CFCoreStore } from "./cfCore.store";
 import { generateMiddleware } from "./middleware";
 
 export const cfCoreProviderFactory: Provider = {
-  inject: [ConfigService, LockService, LoggerService, MessagingProviderId, CFCoreStore],
+  inject: [
+    ConfigService,
+    LockService,
+    LoggerService,
+    MessagingProviderId,
+    CFCoreStore,
+    AppInstanceRepository,
+  ],
   provide: CFCoreProviderId,
   useFactory: async (
     config: ConfigService,
@@ -20,6 +28,7 @@ export const cfCoreProviderFactory: Provider = {
     log: LoggerService,
     messaging: MessagingService,
     store: CFCoreStore,
+    appInstanceRepository: AppInstanceRepository,
   ): Promise<CFCore> => {
     const provider = config.getEthProvider();
     const signer = config.getSigner();
@@ -44,7 +53,7 @@ export const cfCoreProviderFactory: Provider = {
     // inject any default middlewares
     cfCore.injectMiddleware(
       Opcode.OP_VALIDATE,
-      await generateMiddleware(
+      generateMiddleware(
         signerAddress,
         {
           ...contractAddresses,

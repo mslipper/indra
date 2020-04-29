@@ -1,10 +1,12 @@
 import { ConnextStore } from "@connext/store";
+import { ConditionalTransferTypes, IConnextClient, StoreTypes } from "@connext/types";
 import {
-  ConditionalTransferTypes,
-  IConnextClient,
-  StoreTypes,
-} from "@connext/types";
-import { ChannelSigner, getRandomBytes32 } from "@connext/utils";
+  ChannelSigner,
+  getRandomBytes32,
+  getRandomPrivateKey,
+  getPublicKeyFromPrivateKey,
+  getPublicIdentifierFromPublicKey,
+} from "@connext/utils";
 import { ContractFactory, Wallet } from "ethers";
 import { AddressZero } from "ethers/constants";
 import tokenArtifacts from "@openzeppelin/contracts/build/contracts/ERC20Mintable.json";
@@ -265,6 +267,28 @@ describe("Async Transfers", () => {
         recipient: clientB.publicIdentifier,
       }),
     ).to.be.rejectedWith(`Invalid hex string`);
+  });
+
+  it.only("Sender tries to uninstall before receiver", async () => {
+    await fundChannel(clientA, ETH_AMOUNT_SM, tokenAddress);
+
+    const preImage = getRandomBytes32();
+
+    const randomPublicIdentifier = getPublicIdentifierFromPublicKey(
+      getPublicKeyFromPrivateKey(getRandomPrivateKey()),
+    );
+    const res = await clientA.conditionalTransfer({
+      amount: ETH_AMOUNT_SM.toString(),
+      assetId: tokenAddress,
+      conditionType: ConditionalTransferTypes.LinkedTransfer,
+      paymentId: getRandomBytes32(),
+      preImage,
+      recipient: randomPublicIdentifier,
+    });
+
+    const uninstall = await clientA.uninstallApp(res.appIdentityHash);
+    console.log('uninstall: ', uninstall);
+    expect(true).to.be.ok;
   });
 
   it("Experimental: Average latency of 10 async transfers with Eth", async () => {

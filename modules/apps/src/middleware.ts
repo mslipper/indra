@@ -37,7 +37,8 @@ export const generateValidationMiddleware = async (
       }
 
     default:
-      throw new Error(`Unrecognized protocol name: ${protocol}`);
+      const exhaustiveCheck: never = protocol;
+      throw new Error(`Unreachable: ${exhaustiveCheck}`);
     }
   };
 
