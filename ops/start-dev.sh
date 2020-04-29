@@ -6,6 +6,10 @@ project="`cat $dir/../package.json | grep '"name":' | head -n 1 | cut -d '"' -f 
 
 # Turn on swarm mode if it's not already on
 docker swarm init 2> /dev/null || true
+if [[ -z `docker plugin ls | grep loki` ]]
+then docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
+else echo "Loki plugin already installed"
+fi
 
 ####################
 # Load env vars
@@ -162,6 +166,9 @@ pull_if_unavailable "$database_image"
 pull_if_unavailable "$ethprovider_image"
 pull_if_unavailable "$nats_image"
 pull_if_unavailable "$redis_image"
+pull_if_unavailable grafana/loki:latest
+pull_if_unavailable grafana/promtail:latest
+pull_if_unavailable grafana/grafana:master
 
 # Initialize random new secrets
 function new_secret {
@@ -228,6 +235,10 @@ services:
       INDRA_PORT: '$node_port'
       INDRA_REDIS_URL: 'redis://redis:6379'
       NODE_ENV: 'development'
+    logging:
+      driver: 'loki'
+      options:
+        loki-url: 'http://loki:3100/loki/api/v1/push'
     networks:
       - '$project'
     ports:
@@ -243,6 +254,10 @@ services:
     command: 'start'
     environment:
       ETH_MNEMONIC: '$eth_mnemonic'
+    logging:
+      driver: 'loki'
+      options:
+        loki-url: 'http://loki:3100/loki/api/v1/push'
     networks:
       - '$project'
     ports:
@@ -260,6 +275,10 @@ services:
       POSTGRES_DB: '$project'
       POSTGRES_PASSWORD_FILE: '$pg_password_file'
       POSTGRES_USER: '$project'
+    logging:
+      driver: 'loki'
+      options:
+        loki-url: 'http://loki:3100/loki/api/v1/push'
     networks:
       - '$project'
     ports:
@@ -274,6 +293,10 @@ services:
     image: '$nats_image'
     environment:
       JWT_SIGNER_PUBLIC_KEY: '$INDRA_NATS_JWT_SIGNER_PUBLIC_KEY'
+    logging:
+      driver: 'loki'
+      options:
+        loki-url: 'http://loki:3100/loki/api/v1/push'
     networks:
       - '$project'
     ports:
@@ -297,6 +320,8 @@ services:
 
   promtail:
     image: grafana/promtail:latest
+    ports:
+      - "9080:9080"
     volumes:
       - /var/log:/var/log
     command: -config.file=/etc/promtail/docker-config.yaml
