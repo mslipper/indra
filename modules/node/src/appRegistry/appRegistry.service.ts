@@ -34,6 +34,7 @@ import { getAddressFromAssetId } from "@connext/utils";
 import { Injectable, Inject, OnModuleInit } from "@nestjs/common";
 import { MessagingService } from "@connext/messaging";
 import { bigNumberify } from "ethers/utils";
+import { Machine, State, actions, assign, send, sendParent, interpret, spawn } from "xstate";
 
 import { CFCoreService } from "../cfCore/cfCore.service";
 import { ChannelRepository } from "../channel/channel.repository";
@@ -95,6 +96,14 @@ export class AppRegistryService implements OnModuleInit {
 
       if (!registryAppInfo.allowNodeInstall) {
         throw new Error(`App ${registryAppInfo.name} is not allowed to be installed on the node`);
+      }
+
+      if (registryAppInfo.name === HashLockTransferAppName) {
+        hoppedTransferMachine.transition(hoppedTransferMachine.initialState, {
+          type: "SENDER_PROPOSE",
+          senderProposalParams: proposeInstallParams,
+          from,
+        });
       }
 
       await this.runPreInstallValidation(registryAppInfo, proposeInstallParams, from);
@@ -196,16 +205,6 @@ export class AppRegistryService implements OnModuleInit {
           this.cfCoreService.cfCore.publicIdentifier,
         );
 
-        // install for receiver or error
-        // https://github.com/ConnextProject/indra/issues/942
-        const recipient = proposeInstallParams.meta["recipient"];
-        await this.hashlockTransferService.installHashLockTransferReceiverApp(
-          from,
-          recipient,
-          proposeInstallParams.initialState as HashLockTransferAppState,
-          proposeInstallParams.initiatorDepositAssetId,
-          proposeInstallParams.meta,
-        );
         break;
       }
       case SimpleSignedTransferAppName: {
@@ -434,3 +433,132 @@ export class AppRegistryService implements OnModuleInit {
     this.log.info(`Injected CF Core middleware`);
   }
 }
+
+const validateSenderProposal = async (
+  proposeInstallParams: MethodParams.ProposeInstall,
+  from: string,
+) => {
+  const blockNumber = await this.configService.getEthProvider().getBlockNumber();
+  validateHashLockTransferApp(
+    proposeInstallParams,
+    blockNumber,
+    from,
+    this.cfCoreService.cfCore.publicIdentifier,
+  );
+};
+
+const proposeToReceiver = async (
+  proposeInstallParams: MethodParams.ProposeInstall,
+  from: string,
+) => {
+  // install for receiver or error
+  // https://github.com/ConnextProject/indra/issues/942
+  const recipient = proposeInstallParams.meta["recipient"];
+  await this.hashlockTransferService.installHashLockTransferReceiverApp(
+    from,
+    recipient,
+    proposeInstallParams.initialState as HashLockTransferAppState,
+    proposeInstallParams.initiatorDepositAssetId,
+    proposeInstallParams.meta,
+  );
+};
+const installWithSender = async () => true;
+
+interface HoppedTransferContext {
+  senderProposalParams: MethodParams.ProposeInstall | {};
+  from: string;
+}
+
+const hoppedTransferMachine = Machine<HoppedTransferContext>(
+  {
+    id: "hoppedTransfer",
+    initial: "idle",
+    context: {
+      senderProposalParams: {},
+      from: "",
+    },
+    states: {
+      idle: {
+        on: {
+          SENDER_PROPOSE: {
+            target: "senderProposed",
+            actions: ["setSenderProposalParams"],
+          },
+        },
+      },
+      senderProposed: {
+        invoke: {
+          id: "validateSenderProposal",
+          src: (context) =>
+            validateSenderProposal(
+              context.senderProposalParams as MethodParams.ProposeInstall,
+              context.from,
+            ),
+          onDone: {
+            target: "senderProposalAccepted",
+          },
+          onError: {
+            target: "senderProposalRejected",
+          },
+        },
+      },
+      senderProposalAccepted: {
+        invoke: {
+          id: "proposeToReceiver",
+          src: (context) =>
+            proposeToReceiver(
+              context.senderProposalParams as MethodParams.ProposeInstall,
+              context.from,
+            ),
+          onDone: {
+            target: "receiverProposalSent",
+          },
+          onError: {
+            target: "unknownError",
+          },
+        },
+      },
+      senderProposalRejected: {
+        type: "final",
+      },
+      receiverProposalSent: {
+        on: {
+          RECEIVER_PROPOSAL_ACCEPT: "receiverProposalAccepted",
+        },
+      },
+      receiverProposalAccepted: {
+        on: {
+          RECEIVER_INSTALL: "receiverInstalled",
+        },
+      },
+      receiverInstalled: {
+        on: {
+          SENDER_INSTALL: "senderInstalled",
+        },
+        invoke: {
+          id: "installWithSender",
+          src: (context) => installWithSender(context.senderProposalParams),
+          onDone: {
+            target: "senderInstalled",
+          },
+          onError: {
+            target: "unknownError",
+          },
+        },
+      },
+      senderInstalled: {
+        type: "final",
+      },
+      unknownError: {
+        type: "final",
+      },
+    },
+  },
+  {
+    actions: {
+      setSenderProposalParams: assign((context, event) => {
+        return { senderProposalParams: event.proposalParams, from: event.from };
+      }),
+    },
+  },
+);
