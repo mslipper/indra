@@ -257,8 +257,8 @@ export class ConfigService implements OnModuleInit {
         assetId: AddressZero,
         channels: [],
         id: 0,
-        collateralizeThreshold: parseEther(`0.05`),
-        target: parseEther(`0.1`),
+        collateralizeThreshold: Zero,
+        target: Zero,
         reclaimThreshold: Zero,
       };
     }
@@ -266,8 +266,8 @@ export class ConfigService implements OnModuleInit {
       assetId,
       channels: [],
       id: 0,
-      collateralizeThreshold: parseEther(`5`),
-      target: parseEther(`20`),
+      collateralizeThreshold: Zero,
+      target: Zero,
       reclaimThreshold: Zero,
     };
   }
