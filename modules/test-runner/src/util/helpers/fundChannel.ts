@@ -1,8 +1,10 @@
-import { AssetId, CONVENTION_FOR_ETH_ASSET_ID, EventNames, IConnextClient } from "@connext/types";
-import { ColorfulLogger, getAddressFromAssetId, delayAndThrow } from "@connext/utils";
-import { BigNumber } from "ethers/utils";
+import { AssetId, CONVENTION_FOR_ETH_ASSET_ID, EventNames, IConnextClient, RebalanceProfile } from "@connext/types";
+import { ColorfulLogger, getAddressFromAssetId, delayAndThrow, toBN } from "@connext/utils";
+import { BigNumber, parseEther } from "ethers/utils";
 
-import { env, expect } from "../";
+import { env, expect, getNatsClient } from "../";
+import { AddressZero } from "ethers/constants";
+import { addRebalanceProfile } from "./rebalanceProfile";
 
 export const fundChannel = async (
   client: IConnextClient,
@@ -45,6 +47,24 @@ export const requestCollateral = async (
   enforce: boolean = false,
 ): Promise<void> => {
   const log = new ColorfulLogger("RequestCollateral", env.logLevel);
+  let rebalanceProfile;
+  const nats = getNatsClient();
+  if(assetId == CONVENTION_FOR_ETH_ASSET_ID) {
+     rebalanceProfile = {
+      assetId: assetId,
+      collateralizeThreshold: parseEther("0.1"),
+      target: parseEther("0.2"),
+      reclaimThreshold: parseEther("0.5"),
+    };
+  } else {
+    rebalanceProfile = {
+      assetId: assetId,
+      collateralizeThreshold: parseEther("10"),
+      target: parseEther("20"),
+      reclaimThreshold: parseEther("50"),
+    };
+  }
+  await addRebalanceProfile(nats, client, rebalanceProfile, false);
   const tokenAddress = getAddressFromAssetId(assetId);
   const preCollateralBal = await client.getFreeBalance(tokenAddress);
   log.debug(`client.requestCollateral() called`);
