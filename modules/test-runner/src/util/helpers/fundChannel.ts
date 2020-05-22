@@ -1,9 +1,14 @@
-import { AssetId, CONVENTION_FOR_ETH_ASSET_ID, EventNames, IConnextClient, RebalanceProfile } from "@connext/types";
-import { ColorfulLogger, getAddressFromAssetId, delayAndThrow, toBN } from "@connext/utils";
+import {
+  AssetId,
+  CONVENTION_FOR_ETH_ASSET_ID,
+  EventNames,
+  IConnextClient,
+  RebalanceProfile,
+} from "@connext/types";
+import { ColorfulLogger, getAddressFromAssetId, delayAndThrow } from "@connext/utils";
 import { BigNumber, parseEther } from "ethers/utils";
 
 import { env, expect, getNatsClient } from "../";
-import { AddressZero } from "ethers/constants";
 import { addRebalanceProfile } from "./rebalanceProfile";
 
 export const fundChannel = async (
@@ -21,10 +26,20 @@ export const fundChannel = async (
       const expected = prevFreeBalance[client.signerAddress].add(amount);
       expect(freeBalance[client.signerAddress]).to.equal(expected);
       log.info(`Got deposit confirmed event, helper wrapper is returning`);
-      resolve();
+      return resolve();
     });
+    // register failure listeners
     client.once(EventNames.DEPOSIT_FAILED_EVENT, async (msg: any) => {
-      reject(new Error(JSON.stringify(msg)));
+      return reject(new Error(msg.data.error));
+    });
+    client.once(EventNames.PROPOSE_INSTALL_FAILED_EVENT, async (msg: any) => {
+      return reject(new Error(msg.data.error));
+    });
+    client.once(EventNames.INSTALL_FAILED_EVENT, async (msg: any) => {
+      return reject(new Error(msg.data.error));
+    });
+    client.once(EventNames.UNINSTALL_FAILED_EVENT, async (msg: any) => {
+      return reject(new Error(msg.data.error));
     });
 
     try {
@@ -47,10 +62,10 @@ export const requestCollateral = async (
   enforce: boolean = false,
 ): Promise<void> => {
   const log = new ColorfulLogger("RequestCollateral", env.logLevel);
-  let rebalanceProfile;
+  let rebalanceProfile: RebalanceProfile;
   const nats = getNatsClient();
-  if(assetId == CONVENTION_FOR_ETH_ASSET_ID) {
-     rebalanceProfile = {
+  if (assetId === CONVENTION_FOR_ETH_ASSET_ID) {
+    rebalanceProfile = {
       assetId: assetId,
       collateralizeThreshold: parseEther("0.1"),
       target: parseEther("0.2"),
