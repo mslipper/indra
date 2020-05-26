@@ -1,19 +1,67 @@
-import { bigNumberify } from "ethers/utils";
+import {bigNumberify} from 'ethers/utils';
 
-import { isBN, toBN } from "./bigNumbers";
-import { abbreviate } from "./hexStrings";
+import {isBN, toBN} from './bigNumbers';
+import {abbreviate} from './hexStrings';
 
-export const bigNumberifyJson = (json: any): any =>
-  typeof json === "string"
-    ? json
-    : JSON.parse(JSON.stringify(json), (key: string, value: any): any =>
-        value && value["_hex"] ? toBN(value._hex) : value,
-      );
+const MAX_DEPTH = 8;
 
-export const deBigNumberifyJson = (json: any): any =>
-  JSON.parse(JSON.stringify(json), (key: string, val: any) =>
-    val && isBN(val) ? val.toHexString() : val,
-  );
+export const bigNumberifyJson = (json: any): any => {
+  return bigNumberifyTree(json);
+};
+
+function bigNumberifyTree (json: any, depth: number = 0) {
+  if (depth > MAX_DEPTH) {
+    return json;
+  }
+  if (Array.isArray(json)) {
+    const out = [];
+    for (let i = 0; i < json.length; i++) {
+      out.push(bigNumberifyTree(json[i], depth + 1));
+    }
+    return out;
+  }
+  if (json === null || typeof json !== 'object') {
+    return json;
+  }
+  if (json._hex) {
+    return toBN(json._hex);
+  }
+
+  const out = {};
+  for (const key of Object.keys(json)) {
+    out[key] = bigNumberifyTree(json[key], depth + 1);
+  }
+  return out;
+}
+
+export const deBigNumberifyJson = (json: any): any => {
+  return deBigNumberifyTree(json);
+};
+
+function deBigNumberifyTree (json: any, depth: number = 0) {
+  if (depth > MAX_DEPTH) {
+    return json;
+  }
+  if (isBN(json)) {
+    return {_hex: json.toHexString()};
+  }
+  if (Array.isArray(json)) {
+    const out = [];
+    for (let i = 0; i < json.length; i++) {
+      out.push(deBigNumberifyTree(json[i], depth + 1));
+    }
+    return out;
+  }
+  if (json === null || typeof json !== 'object') {
+    return json;
+  }
+
+  const out = {};
+  for (const key of Object.keys(json)) {
+    out[key] = deBigNumberifyTree(json[key], depth + 1);
+  }
+  return out;
+}
 
 // Give abrv = true to abbreviate hex strings and addresss to look like "0x6FEC..kuQk"
 export const stringify = (value: any, abrv: boolean = false): string =>

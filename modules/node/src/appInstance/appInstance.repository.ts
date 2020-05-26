@@ -3,15 +3,23 @@ import {
   AppInstanceProposal,
   OutcomeType,
   SimpleLinkedTransferAppName,
-} from "@connext/types";
+} from '@connext/types';
 import { safeJsonParse } from "@connext/utils";
-import { EntityRepository, Repository } from "typeorm";
+import { EntityRepository, Repository, EntityManager } from "typeorm";
 
 import { Channel } from "../channel/channel.entity";
 import { AppRegistry } from "../appRegistry/appRegistry.entity";
 
 import { AppInstance, AppType } from "./appInstance.entity";
 import { HashZero } from "ethers/constants";
+import {CachingEntityManager} from '../database/CachingEntityManager';
+
+export interface AppInstanceUpdateParams {
+  latestState: any
+  stateTimeout: string
+  latestVersionNumber: number
+  identityHash: string
+}
 
 export const convertAppToInstanceJSON = (app: AppInstance, channel: Channel): AppInstanceJson => {
   if (!app) {
@@ -126,6 +134,10 @@ export class AppInstanceRepository extends Repository<AppInstance> {
     return this.findOne({
       where: { identityHash },
       relations: ["channel"],
+      cache: {
+        id: `app-instance:${identityHash}`,
+        milliseconds: 60000,
+      }
     });
   }
 
@@ -327,5 +339,22 @@ export class AppInstanceRepository extends Repository<AppInstance> {
       .andWhere(`app_instance."latestState"::JSONB @> '{ "paymentId": "${paymentId}" }'`)
       .getMany();
     return res;
+  }
+
+  async updateState(tx: CachingEntityManager, appInstance: AppInstanceUpdateParams) {
+    tx.markCacheKeysDirty(
+      `app-instance:${appInstance.identityHash}`,
+    );
+    return tx.createQueryBuilder()
+      .update(AppInstance)
+      .set({
+        latestState: appInstance.latestState as any,
+        stateTimeout: appInstance.stateTimeout,
+        latestVersionNumber: appInstance.latestVersionNumber,
+      })
+      .where("identityHash = :identityHash", {
+        identityHash: appInstance.identityHash,
+      })
+      .execute();
   }
 }

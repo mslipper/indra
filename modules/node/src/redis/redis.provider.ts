@@ -4,7 +4,7 @@ import Redlock from "redlock";
 
 import { ConfigService } from "../config/config.service";
 import { LoggerService } from "../logger/logger.service";
-import { RedisProviderId, RedlockProviderId } from "../constants";
+import {LOCK_SERVICE_TTL, RedisProviderId, RedlockProviderId} from '../constants';
 
 export const redisClientFactory: FactoryProvider = {
   inject: [ConfigService, LoggerService],
@@ -21,6 +21,8 @@ export const redisClientFactory: FactoryProvider = {
   },
 };
 
+const RETRY_DELAY = 5;
+
 export const redlockClientFactory: FactoryProvider = {
   inject: [RedisProviderId, LoggerService],
   provide: RedlockProviderId,
@@ -32,15 +34,15 @@ export const redlockClientFactory: FactoryProvider = {
 
       // the max number of times Redlock will attempt
       // to lock a resource before erroring
-      retryCount: 3100, // slightly longer than 90000 TTL
+      retryCount: Math.floor(LOCK_SERVICE_TTL + 500 / RETRY_DELAY), // slightly longer than 90000 TTL
 
       // the time in ms between attempts
-      retryDelay: 30, // time in ms
+      retryDelay: RETRY_DELAY, // time in ms
 
       // the max time in ms randomly added to retries
       // to improve performance under high contention
       // see https://www.awsarchitectureblog.com/2015/03/backoff.html
-      retryJitter: 5, // time in ms
+      retryJitter: 0, // time in ms
     });
 
     redlockClient.on("clientError", (e: any) => {

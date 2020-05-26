@@ -1,10 +1,11 @@
 import { SetStateCommitmentJSON } from "@connext/types";
 import { toBNJson } from "@connext/utils";
-import { EntityRepository, Repository } from "typeorm";
+import { EntityRepository, Repository, EntityManager } from "typeorm";
 
 import { SetStateCommitment } from "./setStateCommitment.entity";
 import { AppType } from "../appInstance/appInstance.entity";
 import { BigNumber } from "ethers/utils";
+import {toBN} from '@connext/utils';
 
 export const setStateToJson = (entity: SetStateCommitment): SetStateCommitmentJSON => {
   return {
@@ -52,6 +53,7 @@ export class SetStateCommitmentRepository extends Repository<SetStateCommitment>
       .andWhere("set_state.versionNumber = :versionNumber", {
         versionNumber: versionNumber.toNumber(),
       })
+      .cache('state_commitment_identity_hash_version_number',60000)
       .getOne();
   }
 
@@ -73,5 +75,22 @@ export class SetStateCommitmentRepository extends Repository<SetStateCommitment>
       .leftJoinAndSelect("app.channel", "channel")
       .where("channel.multisigAddress = :multisigAddress", { multisigAddress })
       .getMany();
+  }
+
+  async updateStateCommitment(tx: EntityManager, identityHash: string, update: SetStateCommitmentJSON) {
+    return tx.createQueryBuilder()
+      .update(SetStateCommitment)
+      .set({
+        appIdentity: update.appIdentity,
+        appStateHash: update.appStateHash,
+        challengeRegistryAddress: update.challengeRegistryAddress,
+        signatures: update.signatures,
+        stateTimeout: toBN(update.stateTimeout).toString(),
+        versionNumber: toBN(update.versionNumber).toNumber(),
+      })
+      .where('"appIdentityHash" = :appIdentityHash', {
+        appIdentityHash: identityHash,
+      })
+      .execute();
   }
 }

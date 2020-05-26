@@ -1,8 +1,16 @@
 import { BigNumber, solidityPack, keccak256 } from "ethers/utils";
 import { AppIdentity, CommitmentTarget } from "@connext/types";
 
+const cache: {[k:string]: string} = {};
+
 export const appIdentityToHash = (appIdentity: AppIdentity): string => {
-  return keccak256(
+  const ck = `${appIdentity.multisigAddress}${appIdentity.channelNonce.toString()}${appIdentity.participants.join(',')}${appIdentity.appDefinition}${appIdentity.defaultTimeout}`;
+
+  if (cache[ck]) {
+    return cache[ck];
+  }
+
+  const val = keccak256(
     solidityPack(
       ["address", "uint256", "bytes32", "address", "uint256"],
       [
@@ -14,6 +22,9 @@ export const appIdentityToHash = (appIdentity: AppIdentity): string => {
       ],
     ),
   );
+
+  cache[ck] = val;
+  return val;
 };
 
 // TS version of MChallengeRegistryCore::computeCancelDisputeHash

@@ -124,7 +124,10 @@ export const SendCard = style(
       paymentAction("DONE");
     };
 
+    window.paymentHandler = paymentHandler;
+
     const linkHandler = async () => {
+      console.time('payment');
       if (!channel || !token || amount.error) return;
       if (recipient.error && !recipient.value) {
         setRecipientError(null);
@@ -159,6 +162,8 @@ export const SendCard = style(
         console.warn("Unexpected error creating link payment:", e);
         paymentAction("ERROR");
       }
+      console.timeEnd('payment');
+      console.log('hello there');
     };
 
     const closeModal = () => {

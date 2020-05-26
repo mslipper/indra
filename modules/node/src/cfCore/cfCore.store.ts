@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import {Injectable} from '@nestjs/common';
 import {
   AppInstanceJson,
   AppInstanceProposal,
@@ -19,47 +19,44 @@ import {
   StoredAppChallenge,
   StoredAppChallengeStatus,
   WithdrawalMonitorObject,
-} from "@connext/types";
-import { toBN, getSignerAddressFromPublicIdentifier } from "@connext/utils";
-import { Zero, AddressZero } from "ethers/constants";
-import { getManager } from "typeorm";
-import { bigNumberify, defaultAbiCoder } from "ethers/utils";
+} from '@connext/types';
+import {getSignerAddressFromPublicIdentifier, toBN} from '@connext/utils';
+import {AddressZero, Zero} from 'ethers/constants';
+import {getManager} from 'typeorm';
+import {bigNumberify, defaultAbiCoder} from 'ethers/utils';
 
-import { AppInstanceRepository } from "../appInstance/appInstance.repository";
-import {
-  SetStateCommitmentRepository,
-  setStateToJson,
-} from "../setStateCommitment/setStateCommitment.repository";
-import { WithdrawCommitmentRepository } from "../withdrawCommitment/withdrawCommitment.repository";
-import { ConfigService } from "../config/config.service";
+import {AppInstanceRepository} from '../appInstance/appInstance.repository';
+import {SetStateCommitmentRepository, setStateToJson,} from '../setStateCommitment/setStateCommitment.repository';
+import {WithdrawCommitmentRepository} from '../withdrawCommitment/withdrawCommitment.repository';
+import {ConfigService} from '../config/config.service';
 // eslint-disable-next-line max-len
 import {
   ConditionalTransactionCommitmentRepository,
   convertConditionalCommitmentToJson,
-} from "../conditionalCommitment/conditionalCommitment.repository";
-import { ChannelRepository, convertChannelToJSON } from "../channel/channel.repository";
-import { SetupCommitmentRepository } from "../setupCommitment/setupCommitment.repository";
-import { AppInstance, AppType } from "../appInstance/appInstance.entity";
-import { SetStateCommitment } from "../setStateCommitment/setStateCommitment.entity";
-import { Channel } from "../channel/channel.entity";
-import { ConditionalTransactionCommitment } from "../conditionalCommitment/conditionalCommitment.entity";
+} from '../conditionalCommitment/conditionalCommitment.repository';
+import {ChannelRepository, convertChannelToJSON} from '../channel/channel.repository';
+import {SetupCommitmentRepository} from '../setupCommitment/setupCommitment.repository';
+import {AppInstance, AppType} from '../appInstance/appInstance.entity';
+import {SetStateCommitment} from '../setStateCommitment/setStateCommitment.entity';
+import {Channel} from '../channel/channel.entity';
 import {
-  entityToStoredChallenge,
   ChallengeRepository,
+  entityToStoredChallenge,
   ProcessedBlockRepository,
-} from "../challenge/challenge.repository";
-import { Challenge, ProcessedBlock } from "../challenge/challenge.entity";
+} from '../challenge/challenge.repository';
+import {Challenge, ProcessedBlock} from '../challenge/challenge.entity';
 import {
   entityToStateProgressedEventPayload,
   StateProgressedEvent,
-} from "../stateProgressedEvent/stateProgressedEvent.entity";
+} from '../stateProgressedEvent/stateProgressedEvent.entity';
 import {
-  entityToChallengeUpdatedPayload,
   ChallengeUpdatedEvent,
-} from "../challengeUpdatedEvent/challengeUpdatedEvent.entity";
-import { SetupCommitment } from "../setupCommitment/setupCommitment.entity";
-import { ChallengeRegistry } from "@connext/contracts";
-import { LoggerService } from "../logger/logger.service";
+  entityToChallengeUpdatedPayload,
+} from '../challengeUpdatedEvent/challengeUpdatedEvent.entity';
+import {SetupCommitment} from '../setupCommitment/setupCommitment.entity';
+import {ChallengeRegistry} from '@connext/contracts';
+import {LoggerService} from '../logger/logger.service';
+import {cachedWrappedEMTx} from '../database/CachingEntityManager';
 
 @Injectable()
 export class CFCoreStore implements IStoreService {
@@ -290,76 +287,27 @@ export class CFCoreStore implements IStoreService {
         throw new Error(`Unrecognized outcome type: ${OutcomeType[outcomeType]}`);
     }
 
-    const existingConditionalTx =
-      await this.conditionalTransactionCommitmentRepository.findByAppIdentityHash(
-        appJson.identityHash,
-      );
-
-    await getManager().transaction(async (transactionalEntityManager) => {
+    await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
       await transactionalEntityManager.save(proposal);
-      await transactionalEntityManager
-        .createQueryBuilder()
-        .update(AppInstance)
-        .set({
-          latestState: freeBalanceAppInstance.latestState as any,
-          stateTimeout: freeBalanceAppInstance.stateTimeout,
-          latestVersionNumber: freeBalanceAppInstance.latestVersionNumber,
-        })
-        .where("identityHash = :identityHash", {
-          identityHash: freeBalanceAppInstance.identityHash,
-        })
-        .execute();
-
-      await transactionalEntityManager
-        .createQueryBuilder()
-        .update(SetStateCommitment)
-        .set({
-          appIdentity: signedFreeBalanceUpdate.appIdentity,
-          appStateHash: signedFreeBalanceUpdate.appStateHash,
-          challengeRegistryAddress: signedFreeBalanceUpdate.challengeRegistryAddress,
-          signatures: signedFreeBalanceUpdate.signatures,
-          stateTimeout: toBN(signedFreeBalanceUpdate.stateTimeout).toString(),
-          versionNumber: toBN(signedFreeBalanceUpdate.versionNumber).toNumber(),
-        })
-        .where('"appIdentityHash" = :appIdentityHash', {
-          appIdentityHash: freeBalanceAppInstance.identityHash,
-        })
-        .execute();
-
-      // idempotence
-      if (existingConditionalTx) {
-        await transactionalEntityManager
-          .createQueryBuilder()
-          .update(ConditionalTransactionCommitment)
-          .set({
-            freeBalanceAppIdentityHash: signedConditionalTxCommitment.freeBalanceAppIdentityHash,
-            multisigAddress: signedConditionalTxCommitment.multisigAddress,
-            multisigOwners: signedConditionalTxCommitment.multisigOwners,
-            interpreterAddr: signedConditionalTxCommitment.interpreterAddr,
-            interpreterParams: signedConditionalTxCommitment.interpreterParams,
-            signatures: signedConditionalTxCommitment.signatures,
-            app: proposal,
-          })
-          .where('"appIdentityHash" = :appIdentityHash', {
-            appIdentityHash: signedConditionalTxCommitment.freeBalanceAppIdentityHash,
-          })
-          .execute();
-      } else {
-        await transactionalEntityManager
-          .createQueryBuilder()
-          .insert()
-          .into(ConditionalTransactionCommitment)
-          .values({
-            freeBalanceAppIdentityHash: signedConditionalTxCommitment.freeBalanceAppIdentityHash,
-            multisigAddress: signedConditionalTxCommitment.multisigAddress,
-            multisigOwners: signedConditionalTxCommitment.multisigOwners,
-            interpreterAddr: signedConditionalTxCommitment.interpreterAddr,
-            interpreterParams: signedConditionalTxCommitment.interpreterParams,
-            signatures: signedConditionalTxCommitment.signatures,
-            app: proposal,
-          })
-          .execute();
-      }
+      await this.appInstanceRepository.updateState(
+        transactionalEntityManager,
+        freeBalanceAppInstance,
+        );
+      await this.setStateCommitmentRepository.updateStateCommitment(
+        transactionalEntityManager,
+        freeBalanceAppInstance.identityHash,
+        signedFreeBalanceUpdate,
+      );
+      await this.conditionalTransactionCommitmentRepository.upsertConditionalTx(
+        transactionalEntityManager,
+        signedConditionalTxCommitment.freeBalanceAppIdentityHash,
+        signedConditionalTxCommitment,
+        proposal,
+      );
+      this.channelRepository.resetCaches(
+        transactionalEntityManager,
+        multisigAddress,
+      );
     });
   }
 
@@ -379,33 +327,22 @@ export class CFCoreStore implements IStoreService {
       throw new Error(`App is not of correct type, type: ${app.type}`);
     }
 
-    await getManager().transaction(async (transactionalEntityManager) => {
-      await transactionalEntityManager
-        .createQueryBuilder()
-        .update(AppInstance)
-        .set({
+    await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
+      await this.appInstanceRepository.updateState(
+        transactionalEntityManager,
+        {
           latestState: latestState as AppState,
           stateTimeout,
           latestVersionNumber,
-        })
-        .where("identityHash = :identityHash", { identityHash })
-        .execute();
-
-      await transactionalEntityManager
-        .createQueryBuilder()
-        .update(SetStateCommitment)
-        .set({
-          appIdentity: signedSetStateCommitment.appIdentity,
-          appStateHash: signedSetStateCommitment.appStateHash,
-          challengeRegistryAddress: signedSetStateCommitment.challengeRegistryAddress,
-          signatures: signedSetStateCommitment.signatures,
-          stateTimeout: toBN(signedSetStateCommitment.stateTimeout).toString(),
-          versionNumber: toBN(signedSetStateCommitment.versionNumber).toNumber(),
-        })
-        .where('"appIdentityHash" = :appIdentityHash', {
-          appIdentityHash: signedSetStateCommitment.appIdentityHash,
-        })
-        .execute();
+          identityHash,
+        },
+      );
+      await this.setStateCommitmentRepository.updateStateCommitment(
+        transactionalEntityManager,
+        signedSetStateCommitment.appIdentityHash,
+        signedSetStateCommitment,
+      );
+      this.channelRepository.resetCaches(transactionalEntityManager, multisigAddress);
     });
   }
 
@@ -423,43 +360,29 @@ export class CFCoreStore implements IStoreService {
       this.log.warn(`Could not find app instance to remove`);
     }
 
-    await getManager().transaction(async (transactionalEntityManager) => {
+    await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
       if (app) {
         await transactionalEntityManager.save(app);
       }
-      await transactionalEntityManager
-        .createQueryBuilder()
-        .update(AppInstance)
-        .set({
-          latestState: freeBalanceAppInstance.latestState as any,
-          stateTimeout: freeBalanceAppInstance.stateTimeout,
-          latestVersionNumber: freeBalanceAppInstance.latestVersionNumber,
-        })
-        .where("identityHash = :identityHash", {
-          identityHash: freeBalanceAppInstance.identityHash,
-        })
-        .execute();
+      await this.appInstanceRepository.updateState(
+        transactionalEntityManager,
+        freeBalanceAppInstance,
+      );
       await transactionalEntityManager
         .createQueryBuilder()
         .relation(Channel, "appInstances")
         .of(multisigAddress)
         .remove(app.identityHash);
 
-      await transactionalEntityManager
-        .createQueryBuilder()
-        .update(SetStateCommitment)
-        .set({
-          appIdentity: signedFreeBalanceUpdate.appIdentity,
-          appStateHash: signedFreeBalanceUpdate.appStateHash,
-          challengeRegistryAddress: signedFreeBalanceUpdate.challengeRegistryAddress,
-          signatures: signedFreeBalanceUpdate.signatures,
-          stateTimeout: toBN(signedFreeBalanceUpdate.stateTimeout).toString(),
-          versionNumber: toBN(signedFreeBalanceUpdate.versionNumber).toNumber(),
-        })
-        .where('"appIdentityHash" = :appIdentityHash', {
-          appIdentityHash: freeBalanceAppInstance.identityHash,
-        })
-        .execute();
+      await this.setStateCommitmentRepository.updateStateCommitment(
+        transactionalEntityManager,
+        freeBalanceAppInstance.identityHash,
+        signedFreeBalanceUpdate,
+      );
+      this.channelRepository.resetCaches(
+        transactionalEntityManager,
+        multisigAddress,
+      );
     });
   }
 
@@ -517,7 +440,7 @@ export class CFCoreStore implements IStoreService {
     // because the app instance has `cascade` set to true, saving
     // the channel will involve multiple queries and should be put
     // within a transaction
-    await getManager().transaction(async (transactionalEntityManager) => {
+    await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
       await transactionalEntityManager.save(app);
       await transactionalEntityManager.save(setStateCommitment);
 
@@ -535,6 +458,10 @@ export class CFCoreStore implements IStoreService {
         .relation(Channel, "appInstances")
         .of(multisigAddress)
         .add(app.identityHash);
+      this.channelRepository.resetCaches(
+        transactionalEntityManager,
+        multisigAddress,
+      );
     });
   }
 
@@ -550,13 +477,17 @@ export class CFCoreStore implements IStoreService {
     app.type = AppType.REJECTED;
 
     app.channel = undefined;
-    await getManager().transaction(async (transactionalEntityManager) => {
+    await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
       await transactionalEntityManager.save(app);
       await transactionalEntityManager
         .createQueryBuilder()
         .relation(Channel, "appInstances")
         .of(multisigAddress)
         .remove(app.identityHash);
+      this.channelRepository.resetCaches(
+        transactionalEntityManager,
+        multisigAddress,
+      );
     });
   }
 

@@ -1,7 +1,8 @@
-import { EntityRepository, Repository } from "typeorm";
-import { ConditionalTransactionCommitment } from "./conditionalCommitment.entity";
-import { ConditionalTransactionCommitmentJSON, ContractAddresses } from "@connext/types";
-import { AppType } from "../appInstance/appInstance.entity";
+import {EntityRepository, Repository} from 'typeorm';
+import {ConditionalTransactionCommitment} from './conditionalCommitment.entity';
+import {ConditionalTransactionCommitmentJSON, ContractAddresses} from '@connext/types';
+import {AppInstance, AppType} from '../appInstance/appInstance.entity';
+import {CachingEntityManager} from '../database/CachingEntityManager';
 
 export const convertConditionalCommitmentToJson = (
   commitment: ConditionalTransactionCommitment,
@@ -29,6 +30,7 @@ export class ConditionalTransactionCommitmentRepository extends Repository<
     return this.createQueryBuilder("conditional")
       .leftJoinAndSelect("conditional.app", "app")
       .where("app.identityHash = :appIdentityHash", { appIdentityHash })
+      .cache(`ctc:${appIdentityHash}`, 60000)
       .getOne();
   }
 
@@ -54,5 +56,49 @@ export class ConditionalTransactionCommitmentRepository extends Repository<
         "channel.multisigAddress = :multisigAddress", { multisigAddress },
       )
       .getMany();
+  }
+
+  async upsertConditionalTx (tx: CachingEntityManager, identityHash: string, ctc: ConditionalTransactionCommitmentJSON, proposal: AppInstance) {
+    const subQuery = tx.createQueryBuilder()
+      .select('id')
+      .from(ConditionalTransactionCommitment, 'ctc')
+      .innerJoin('ctc.app', 'app')
+      .where('app.identityHash = $1')
+      .getQuery();
+    const [{exists}] = await tx.query(`SELECT EXISTS(${subQuery}) as "exists"`, [
+      identityHash,
+    ]);
+    if (exists) {
+      tx.markCacheKeyDirty(`ctc:${identityHash}`);
+      return tx.createQueryBuilder()
+        .update(ConditionalTransactionCommitment)
+        .set({
+          freeBalanceAppIdentityHash: ctc.freeBalanceAppIdentityHash,
+          multisigAddress: ctc.multisigAddress,
+          multisigOwners: ctc.multisigOwners,
+          interpreterAddr: ctc.interpreterAddr,
+          interpreterParams: ctc.interpreterParams,
+          signatures: ctc.signatures,
+          app: proposal,
+        })
+        .where('"appIdentityHash" = :appIdentityHash', {
+          appIdentityHash: identityHash,
+        })
+        .execute();
+    }
+
+    return tx.createQueryBuilder()
+      .insert()
+      .into(ConditionalTransactionCommitment)
+      .values({
+        freeBalanceAppIdentityHash: ctc.freeBalanceAppIdentityHash,
+        multisigAddress: ctc.multisigAddress,
+        multisigOwners: ctc.multisigOwners,
+        interpreterAddr: ctc.interpreterAddr,
+        interpreterParams: ctc.interpreterParams,
+        signatures: ctc.signatures,
+        app: proposal,
+      })
+      .execute();
   }
 }

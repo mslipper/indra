@@ -12,6 +12,7 @@ import { RebalanceProfile } from "../rebalanceProfile/rebalanceProfile.entity";
 
 import { Channel } from "./channel.entity";
 import { AppType } from "../appInstance/appInstance.entity";
+import {CachingEntityManager} from '../database/CachingEntityManager';
 
 const log = new LoggerService("ChannelRepository");
 
@@ -45,9 +46,10 @@ export class ChannelRepository extends Repository<Channel> {
   }
 
   async getStateChannelByOwners(owners: string[]): Promise<StateChannelJSON | undefined> {
-    const [channel] = (
-      await Promise.all(owners.map((owner) => this.findByUserPublicIdentifier(owner)))
-    ).filter((chan) => !!chan);
+    const channel = await this.createQueryBuilder('channel')
+      .leftJoinAndSelect("channel.appInstances", "appInstance")
+      .where("channel.userIdentifier IN (:...owners)", { owners })
+      .getOne();
     if (!channel) {
       return undefined;
     }
@@ -74,6 +76,7 @@ export class ChannelRepository extends Repository<Channel> {
     return this.createQueryBuilder("channel")
       .leftJoinAndSelect("channel.appInstances", "appInstance")
       .where("channel.multisigAddress = :multisigAddress", { multisigAddress })
+      .cache(`channel:${multisigAddress}`, 60000)
       .getOne();
   }
 
@@ -200,5 +203,10 @@ export class ChannelRepository extends Repository<Channel> {
       })
       .where("multisigAddress = :multisigAddress", { multisigAddress: channel.multisigAddress });
     await query.execute();
+    await this.manager.connection.queryResultCache.remove([`channel:${channel.multisigAddress}`])
+  }
+
+  resetCaches(cem: CachingEntityManager, address: string) {
+    cem.markCacheKeysDirty(`channel:${address}`)
   }
 }

@@ -19,13 +19,32 @@ export const INDRA_PUB_ID_PREFIX = "indra";
 export const getPublicIdentifierFromPublicKey = (publicKey: PublicKey): PublicIdentifier =>
   INDRA_PUB_ID_PREFIX + bs58check.encode(compress(hexToBuffer(publicKey)));
 
-export const getPublicKeyFromPublicIdentifier = (publicIdentifier: PublicIdentifier) =>
-  `0x${bufferToHex(decompress(bs58check.decode(
+const identCache: {[k:string]: string} = {};
+
+export const getPublicKeyFromPublicIdentifier = (publicIdentifier: PublicIdentifier): string => {
+  if (identCache[publicIdentifier]) {
+    return identCache[publicIdentifier];
+  }
+
+  const val = `0x${bufferToHex(decompress(bs58check.decode(
     publicIdentifier.replace(INDRA_PUB_ID_PREFIX, ""),
   )))}`;
+  identCache[publicIdentifier] = val;
+  return val;
+};
 
-export const getSignerAddressFromPublicIdentifier = (publicIdentifier: PublicIdentifier): Address =>
-  getAddressFromPublicKey(getPublicKeyFromPublicIdentifier(publicIdentifier));
+const addrCache: {[k:string]: string} = {};
+
+export const getSignerAddressFromPublicIdentifier = (publicIdentifier: PublicIdentifier): Address => {
+  if (addrCache[publicIdentifier]) {
+    return addrCache[publicIdentifier];
+  }
+
+  const val = getAddressFromPublicKey(getPublicKeyFromPublicIdentifier(publicIdentifier));
+  addrCache[publicIdentifier] = val;
+  console.log('cached signer address', publicIdentifier, val);
+  return val;
+}
 
 // makes sure all addresses are normalized
 export const getAddressFromAssetId = (assetId: AssetId): Address => getAddress(assetId);
