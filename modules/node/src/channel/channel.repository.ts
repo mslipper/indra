@@ -76,7 +76,6 @@ export class ChannelRepository extends Repository<Channel> {
     return this.createQueryBuilder("channel")
       .leftJoinAndSelect("channel.appInstances", "appInstance")
       .where("channel.multisigAddress = :multisigAddress", { multisigAddress })
-      .cache(`channel:${multisigAddress}`, 60000)
       .getOne();
   }
 
