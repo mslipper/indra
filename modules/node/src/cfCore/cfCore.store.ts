@@ -291,8 +291,9 @@ export class CFCoreStore implements IStoreService {
       await transactionalEntityManager.save(proposal);
       await this.appInstanceRepository.updateState(
         transactionalEntityManager,
+        multisigAddress,
         freeBalanceAppInstance,
-        );
+      );
       await this.setStateCommitmentRepository.updateStateCommitment(
         transactionalEntityManager,
         freeBalanceAppInstance.identityHash,
@@ -307,6 +308,7 @@ export class CFCoreStore implements IStoreService {
       this.channelRepository.resetCaches(
         transactionalEntityManager,
         multisigAddress,
+        freeBalanceAppInstance.identityHash,
       );
     });
   }
@@ -330,6 +332,7 @@ export class CFCoreStore implements IStoreService {
     await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
       await this.appInstanceRepository.updateState(
         transactionalEntityManager,
+        multisigAddress,
         {
           latestState: latestState as AppState,
           stateTimeout,
@@ -342,7 +345,11 @@ export class CFCoreStore implements IStoreService {
         signedSetStateCommitment.appIdentityHash,
         signedSetStateCommitment,
       );
-      this.channelRepository.resetCaches(transactionalEntityManager, multisigAddress);
+      this.channelRepository.resetCaches(
+        transactionalEntityManager,
+        multisigAddress,
+        signedSetStateCommitment.appIdentityHash,
+      );
     });
   }
 
@@ -366,6 +373,7 @@ export class CFCoreStore implements IStoreService {
       }
       await this.appInstanceRepository.updateState(
         transactionalEntityManager,
+        multisigAddress,
         freeBalanceAppInstance,
       );
       await transactionalEntityManager
@@ -382,6 +390,7 @@ export class CFCoreStore implements IStoreService {
       this.channelRepository.resetCaches(
         transactionalEntityManager,
         multisigAddress,
+        freeBalanceAppInstance.identityHash
       );
     });
   }
@@ -461,6 +470,7 @@ export class CFCoreStore implements IStoreService {
       this.channelRepository.resetCaches(
         transactionalEntityManager,
         multisigAddress,
+        app.identityHash,
       );
     });
   }
@@ -487,6 +497,7 @@ export class CFCoreStore implements IStoreService {
       this.channelRepository.resetCaches(
         transactionalEntityManager,
         multisigAddress,
+        appIdentityHash,
       );
     });
   }

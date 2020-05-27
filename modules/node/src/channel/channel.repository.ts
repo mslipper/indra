@@ -76,6 +76,7 @@ export class ChannelRepository extends Repository<Channel> {
     return this.createQueryBuilder("channel")
       .leftJoinAndSelect("channel.appInstances", "appInstance")
       .where("channel.multisigAddress = :multisigAddress", { multisigAddress })
+      .cache(`channel:${multisigAddress}`, 60000)
       .getOne();
   }
 
@@ -91,16 +92,11 @@ export class ChannelRepository extends Repository<Channel> {
     // TODO: fix this query
     // when you return just `channel` you will only have one app instance
     // that matches the appId
-    const channel = await this.createQueryBuilder("channel")
+    return this.createQueryBuilder("channel")
       .leftJoin("channel.appInstances", "appInstance")
       .where("appInstance.identityHash = :appIdentityHash", { appIdentityHash })
+      .cache(`channel:${appIdentityHash}`, 60000)
       .getOne();
-    if (!channel) {
-      return undefined;
-    }
-    return this.findOne(channel.multisigAddress, {
-      relations: ["appInstances"],
-    });
   }
 
   async findByAppIdentityHashOrThrow(appIdentityHash: string): Promise<Channel> {
@@ -205,7 +201,7 @@ export class ChannelRepository extends Repository<Channel> {
     await this.manager.connection.queryResultCache.remove([`channel:${channel.multisigAddress}`])
   }
 
-  resetCaches(cem: CachingEntityManager, address: string) {
-    cem.markCacheKeysDirty(`channel:${address}`)
+  resetCaches(cem: CachingEntityManager, address: string, identityHash: string) {
+    cem.markCacheKeysDirty(`channel:${address}`, `channel:${identityHash}`)
   }
 }

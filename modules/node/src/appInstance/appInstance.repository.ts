@@ -149,7 +149,7 @@ export class AppInstanceRepository extends Repository<AppInstance> {
     return app;
   }
 
-  findByMultisigAddressAndType(multisigAddress: string, type: AppType): Promise<AppInstance[]> {
+  findFreeBalanceByMultisigAddress(multisigAddress: string): Promise<AppInstance[]> {
     return this.createQueryBuilder("app_instances")
       .leftJoinAndSelect(
         "app_instances.channel",
@@ -157,7 +157,8 @@ export class AppInstanceRepository extends Repository<AppInstance> {
         "channel.multisigAddress = :multisigAddress",
         { multisigAddress },
       )
-      .where("app_instance.type = :type", { type })
+      .where("app_instance.type = :type", { type: AppType.FREE_BALANCE })
+      .cache(`app-instance:${multisigAddress}`, 60000)
       .getMany();
   }
 
@@ -170,7 +171,7 @@ export class AppInstanceRepository extends Repository<AppInstance> {
   }
 
   async getFreeBalance(multisigAddress: string): Promise<AppInstanceJson | undefined> {
-    const [app] = await this.findByMultisigAddressAndType(multisigAddress, AppType.FREE_BALANCE);
+    const [app] = await this.findFreeBalanceByMultisigAddress(multisigAddress);
     return app && convertAppToInstanceJSON(app, app.channel);
   }
 
@@ -341,9 +342,10 @@ export class AppInstanceRepository extends Repository<AppInstance> {
     return res;
   }
 
-  async updateState(tx: CachingEntityManager, appInstance: AppInstanceUpdateParams) {
+  async updateState(tx: CachingEntityManager, multisigAddress: string, appInstance: AppInstanceUpdateParams) {
     tx.markCacheKeysDirty(
       `app-instance:${appInstance.identityHash}`,
+      `app-instance:free-balance:${multisigAddress}`
     );
     return tx.createQueryBuilder()
       .update(AppInstance)
