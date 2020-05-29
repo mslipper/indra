@@ -288,7 +288,7 @@ export class CFCoreStore implements IStoreService {
     }
 
     await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
-      await transactionalEntityManager.save(proposal);
+      await this.appInstanceRepository.saveTx(transactionalEntityManager, proposal);
       await this.appInstanceRepository.updateState(
         transactionalEntityManager,
         multisigAddress,
@@ -369,7 +369,7 @@ export class CFCoreStore implements IStoreService {
 
     await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
       if (app) {
-        await transactionalEntityManager.save(app);
+        await this.appInstanceRepository.saveTx(transactionalEntityManager, app);
       }
       await this.appInstanceRepository.updateState(
         transactionalEntityManager,
@@ -390,7 +390,7 @@ export class CFCoreStore implements IStoreService {
       this.channelRepository.resetCaches(
         transactionalEntityManager,
         multisigAddress,
-        freeBalanceAppInstance.identityHash
+        appIdentityHash,
       );
     });
   }
@@ -450,7 +450,7 @@ export class CFCoreStore implements IStoreService {
     // the channel will involve multiple queries and should be put
     // within a transaction
     await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
-      await transactionalEntityManager.save(app);
+      await this.appInstanceRepository.saveTx(transactionalEntityManager, app);
       await transactionalEntityManager.save(setStateCommitment);
 
       await transactionalEntityManager
@@ -488,7 +488,7 @@ export class CFCoreStore implements IStoreService {
 
     app.channel = undefined;
     await cachedWrappedEMTx(getManager(), async (transactionalEntityManager) => {
-      await transactionalEntityManager.save(app);
+      await this.appInstanceRepository.saveTx(transactionalEntityManager, app);
       await transactionalEntityManager
         .createQueryBuilder()
         .relation(Channel, "appInstances")

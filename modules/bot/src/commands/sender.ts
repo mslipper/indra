@@ -127,6 +127,7 @@ export default {
           } (signer: ${senderSigner})`,
         );
 
+        const start = Date.now();
         await client.conditionalTransfer({
           paymentId,
           amount: TRANSFER_AMT,
@@ -136,7 +137,7 @@ export default {
           assetId: AddressZero,
           meta: { info: "Response payment" },
         } as PublicParams.SignedTransfer);
-
+        log.info(`Conditional transfer ${paymentId} sent. Elapsed: ${Date.now() - start}`);
       },
     );
 
@@ -148,6 +149,7 @@ export default {
       } (${receiverSigner})`,
     );
 
+    const start = Date.now();
     await client.conditionalTransfer({
       paymentId,
       amount: TRANSFER_AMT,
@@ -158,6 +160,6 @@ export default {
       meta: { info: "Bootstrap payment" },
     });
 
-    log.info(`Conditional transfer ${paymentId} sent`);
+    log.info(`Conditional transfer ${paymentId} sent. Elapsed: ${Date.now() - start}`);
   },
 };

@@ -342,6 +342,14 @@ export class AppInstanceRepository extends Repository<AppInstance> {
     return res;
   }
 
+  async saveTx(tx: CachingEntityManager, app: AppInstance): Promise<void> {
+    tx.markCacheKeysDirty(
+      `app-instance:${app.identityHash}`,
+      `app-instance:free-balance:${app.identityHash}`
+    );
+    await tx.save(app);
+  }
+
   async updateState(tx: CachingEntityManager, multisigAddress: string, appInstance: AppInstanceUpdateParams) {
     tx.markCacheKeysDirty(
       `app-instance:${appInstance.identityHash}`,

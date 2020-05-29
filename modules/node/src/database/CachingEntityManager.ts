@@ -8,24 +8,25 @@ export async function cachedWrappedEMTx<T> (em: EntityManager, cb: (em: CachingE
   });
   if (cem) {
     await em.connection.queryResultCache.remove(cem.getDirtyKeys());
-    console.log('purged keys', cem.getDirtyKeys());
   }
   return res;
 }
 
 export class CachingEntityManager extends EntityManager {
-  private dirtyKeys: string[] = [];
+  private dirtyKeys: Set<string> = new Set<string>();
 
   markCacheKeyDirty (key: string) {
-    this.dirtyKeys.push(key);
+    this.dirtyKeys.add(key);
   }
 
   markCacheKeysDirty (...keys: string[]) {
-    this.dirtyKeys = this.dirtyKeys.concat(keys);
+    for (const key of keys) {
+      this.dirtyKeys.add(key);
+    }
   }
 
   getDirtyKeys () {
-    return this.dirtyKeys;
+    return Array.from(this.dirtyKeys);
   }
 
   static fromEM (em: EntityManager) {
